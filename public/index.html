@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codenames Online</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+
+<body>
+    <!-- Initial Screen to choose Host or Join -->
+    <div id="home-screen">
+        <div class="home-box">
+            <h1>CODENAMES</h1>
+            <input type="text" id="nickname-input" placeholder="Enter your nickname">
+            <div class="home-buttons">
+                <button id="host-btn">Host Game</button>
+                <button id="show-join-btn">Join Game</button>
+            </div>
+            <div id="join-form" style="display: none;">
+                <input type="text" id="game-code-input" placeholder="Enter Game Code" maxlength="4">
+                <button id="join-btn">Join</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Game Container (Lobby and Game Board) -->
+    <div id="game-container" style="display: none;">
+        <div class="team-sidebar red-team">
+            <h2>RED TEAM</h2>
+            <div class="role-group">
+                <h3>SPYMASTER</h3>
+                <div id="red-spymaster" class="player-list"></div>
+            </div>
+            <div class="role-group">
+                <h3>OPERATIVES</h3>
+                <div id="red-operatives" class="player-list"></div>
+            </div>
+        </div>
+
+        <main id="center-column">
+            <!-- LOBBY VIEW -->
+            <div id="lobby-view">
+                <div class="game-code-display">GAME CODE: <span id="game-code-text">----</span></div>
+                <h2>SELECT YOUR ROLE</h2>
+                <div class="role-buttons">
+                    <button class="role-btn" data-role="red-spymaster">Red Spymaster</button>
+                    <button class="role-btn" data-role="red-operative">Red Operative</button>
+                    <button class="role-btn" data-role="blue-spymaster">Blue Spymaster</button>
+                    <button class="role-btn" data-role="blue-operative">Blue Operative</button>
+                </div>
+                <div id="host-controls" style="display: none;">
+                    <div class="start-options-label">Starting Team</div>
+                    <button id="red-starts-btn" class="start-option-btn active">Red</button>
+                    <button id="blue-starts-btn" class="start-option-btn">Blue</button>
+                    <button id="start-game-btn">START GAME</button>
+                </div>
+            </div>
+            <!-- GAME VIEW (Initially Hidden) -->
+            <div id="game-view" style="display: none;">
+                <div id="game-info">
+                    <h3 id="turn-indicator"></h3>
+                    <p id="clue-display"></p>
+                    <button id="end-turn-btn" style="display: none;">End Turn</button>
+                </div>
+                <div id="game-board"></div>
+                <div id="spymaster-controls" style="display: none;">
+                    <input type="text" id="clue-word-input" placeholder="Clue word">
+                    <!-- THIS IS THE CHANGE -->
+                    <input type="number" id="clue-number-input" min="1" placeholder="Num">
+                    <button id="submit-clue-btn">Submit Clue</button>
+                </div>
+            </div>
+        </main>
+
+        <div class="team-sidebar blue-team">
+            <h2>BLUE TEAM</h2>
+            <div class="role-group">
+                <h3>SPYMASTER</h3>
+                <div id="blue-spymaster" class="player-list"></div>
+            </div>
+            <div class="role-group">
+                <h3>OPERATIVES</h3>
+                <div id="blue-operatives" class="player-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME OVER MODAL -->
+    <div id="game-over-modal" style="display: none;">
+        <div class="modal-content">
+            <h2 id="winner-message"></h2><button id="play-again-btn">Back to Lobby</button>
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/js/client.js"></script>
+</body>
+
+</html>
