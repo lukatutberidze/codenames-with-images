@@ -20,49 +20,51 @@ function setupNewGame(roomCode, startingTeam) { const room = gameRooms[roomCode]
 function clearAllVotes(gameState) { gameState.board.forEach(card => card.votes = []); }
 function switchTurn(gameState) { gameState.turn = gameState.turn === 'red' ? 'blue' : 'red'; gameState.clue = { word: '', number: 0 }; gameState.guessesAllowed = 0; gameState.guessesLeft = 0; clearAllVotes(gameState); }
 
+// --- THIS IS THE FUNCTION WITH THE FIX ---
 function revealCard(room, cardIndex, gameCode) {
     const { gameState } = room;
     gameState.board[cardIndex].revealed = true;
     gameState.guessesLeft--;
     const cardColor = gameState.keycard[cardIndex];
-    if (cardColor === 'assassin') { gameState.gameOver = true; gameState.winningTeam = gameState.turn === 'red' ? 'blue' : 'red'; }
-    else if (cardColor === 'bystander' || cardColor !== gameState.turn) { switchTurn(gameState); }
-    else {
-        const redLeft = gameState.board.filter((c, i) => gameState.keycard[i] === 'red' && !c.revealed).length;
-        const blueLeft = gameState.board.filter((c, i) => gameState.keycard[i] === 'blue' && !c.revealed).length;
-        if (redLeft === 0) { gameState.gameOver = true; gameState.winningTeam = 'red'; }
-        if (blueLeft === 0) { gameState.gameOver = true; gameState.winningTeam = 'blue'; }
-        if (gameState.guessesLeft === 0 && !gameState.gameOver) { switchTurn(gameState); }
+
+    // Step 1: Always check for a win condition first.
+    const redLeft = gameState.board.filter((c, i) => gameState.keycard[i] === 'red' && !c.revealed).length;
+    const blueLeft = gameState.board.filter((c, i) => gameState.keycard[i] === 'blue' && !c.revealed).length;
+    if (redLeft === 0) {
+        gameState.gameOver = true;
+        gameState.winningTeam = 'red';
+        io.to(gameCode).emit('cardRevealed', gameState);
+        return; // Stop execution here, the game is over.
     }
+    if (blueLeft === 0) {
+        gameState.gameOver = true;
+        gameState.winningTeam = 'blue';
+        io.to(gameCode).emit('cardRevealed', gameState);
+        return; // Stop execution here, the game is over.
+    }
+
+    // Step 2: If no one has won, check for assassin or turn-ending plays.
+    if (cardColor === 'assassin') {
+        gameState.gameOver = true;
+        gameState.winningTeam = gameState.turn === 'red' ? 'blue' : 'red';
+    } else if (cardColor === 'bystander' || cardColor !== gameState.turn) {
+        switchTurn(gameState); // Wrong guess ends the turn.
+    } else { // Correct guess
+        if (gameState.guessesLeft === 0) {
+            switchTurn(gameState); // Ran out of guesses, end the turn.
+        }
+    }
+    
     clearAllVotes(gameState);
     io.to(gameCode).emit('cardRevealed', gameState);
 }
 
 io.on('connection', (socket) => {
+    // All other socket event handlers remain exactly the same.
     socket.on('hostGame', (nickname) => { const gameCode = generateGameCode(); socket.join(gameCode); gameRooms[gameCode] = { hostId: socket.id, players: [{ id: socket.id, nickname: nickname, role: null }], gameState: createNewGameState() }; socket.emit('gameCreated', { gameCode, room: gameRooms[gameCode] }); });
     socket.on('joinGame', ({ nickname, gameCode }) => { const room = gameRooms[gameCode]; if (!room) { return socket.emit('gameError', 'Game not found.'); } socket.join(gameCode); room.players.push({ id: socket.id, nickname: nickname, role: null }); socket.emit('joinSuccess', { gameCode, room }); io.to(gameCode).emit('playerListUpdate', room.players); });
     socket.on('selectRole', ({ role, gameCode }) => { const room = gameRooms[gameCode]; if (!room) return; const player = room.players.find(p => p.id === socket.id); if (player) { const e = room.players.find(p => p.role === role); if (role.includes('spymaster') && e) { return socket.emit('gameError', 'This Spymaster role is already taken.'); } player.role = role; io.to(gameCode).emit('playerListUpdate', room.players); } });
-    
-    // --- THIS IS THE UPDATED FUNCTION ---
-    socket.on('startGame', ({ gameCode, startingTeam }) => {
-        const room = gameRooms[gameCode];
-        if (room && room.hostId === socket.id) {
-            // Server-side validation for team composition
-            const players = room.players;
-            const hasRedSpymaster = players.some(p => p.role === 'red-spymaster');
-            const hasRedOperative = players.some(p => p.role === 'red-operative');
-            const hasBlueSpymaster = players.some(p => p.role === 'blue-spymaster');
-            const hasBlueOperative = players.some(p => p.role === 'blue-operative');
-
-            if (!hasRedSpymaster || !hasRedOperative || !hasBlueSpymaster || !hasBlueOperative) {
-                return socket.emit('gameError', 'Cannot start. Both teams need at least one Spymaster and one Operative.');
-            }
-
-            setupNewGame(gameCode, startingTeam);
-            io.to(gameCode).emit('gameStarted', room.gameState);
-        }
-    });
-    
+    socket.on('startGame', ({ gameCode, startingTeam }) => { const room = gameRooms[gameCode]; if (room && room.hostId === socket.id) { const p = room.players; const rS = p.some(x=>x.role==='red-spymaster'), rO = p.some(x=>x.role==='red-operative'), bS = p.some(x=>x.role==='blue-spymaster'), bO = p.some(x=>x.role==='blue-operative'); if (!rS||!rO||!bS||!bO) { return socket.emit('gameError', 'Both teams need at least one Spymaster and one Operative.'); } setupNewGame(gameCode, startingTeam); io.to(gameCode).emit('gameStarted', room.gameState); } });
     socket.on('submitClue', ({ clue, gameCode }) => { const room = gameRooms[gameCode]; if (!room) return; const player = room.players.find(p => p.id === socket.id); const { gameState } = room; if (player && player.role === `${gameState.turn}-spymaster`) { const cardsLeft = gameState.board.filter((c, i) => gameState.keycard[i] === gameState.turn && !c.revealed).length; if (clue.number > cardsLeft || clue.number < 1) return; gameState.clue = clue; gameState.guessesAllowed = clue.number; gameState.guessesLeft = clue.number; io.to(gameCode).emit('clueSubmitted', gameState); } });
     socket.on('voteForCard', ({ cardIndex, gameCode }) => { const room = gameRooms[gameCode]; if (!room) return; const player = room.players.find(p => p.id === socket.id); const { gameState } = room; const card = gameState.board[cardIndex]; const canVote = player && player.role.includes('operative') && gameState.turn.startsWith(player.role.split('-')[0]) && !card.revealed && gameState.clue.word; if (!canVote) return; const voteIndex = card.votes.indexOf(player.id); if (voteIndex > -1) card.votes.splice(voteIndex, 1); else card.votes.push(player.id); const operatives = room.players.filter(p => p.role === `${gameState.turn}-operative`); const totalOperatives = operatives.length > 0 ? operatives.length : 1; if (card.votes.length >= totalOperatives) { revealCard(room, cardIndex, gameCode); } else { io.to(gameCode).emit('voteUpdate', gameState); } });
     socket.on('endTurn', ({ gameCode }) => { const room = gameRooms[gameCode]; if (!room) return; const player = room.players.find(p => p.id === socket.id); if (player && player.role.includes('operative') && room.gameState.turn.startsWith(player.role.split('-')[0])) { switchTurn(room.gameState); io.to(gameCode).emit('turnEnded', room.gameState); } });
